@@ -1,0 +1,175 @@
+// AgriPulse — Prisma schema
+// Maps to SRS §4.3 Software Interfaces: crops, markets, daily_prices,
+// ussd_sessions, prediction_logs, admin_users
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Crop master data — F-ADM-02, NF-SCA-02 (data-driven, no code changes to add crops)
+// ─────────────────────────────────────────────
+model Crop {
+  id          String   @id @default(uuid())
+  name        String   @unique          // e.g. "Maize"
+  nameRw      String?  @map("name_rw")  // Kinyarwanda name, for USSD prompts (NF-USA-02)
+  unit        String   @default("kg")   // unit of measure (RWF/kg per F-USS-03)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  dailyPrices      DailyPrice[]
+  predictionLogs   PredictionLog[]
+  cropMarkets      CropMarket[]
+  cropQueryLogs    CropQueryLog[]
+
+  @@map("crops")
+}
+
+// ─────────────────────────────────────────────
+// Market locations — F-ADM-03
+// ─────────────────────────────────────────────
+model Market {
+  id          String   @id @default(uuid())
+  name        String   @unique          // e.g. "Nyabugogo"
+  region      String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  dailyPrices      DailyPrice[]
+  predictionLogs   PredictionLog[]
+  cropMarkets      CropMarket[]
+
+  @@map("markets")
+}
+
+// ─────────────────────────────────────────────
+// Explicit join table: which crops are actively traded at which markets.
+// Needed because F-USS-03 requires listing "all active markets where that
+// crop is available" — without this you'd have to infer availability from
+// DailyPrice rows, which breaks the "no data yet today" case.
+// ─────────────────────────────────────────────
+model CropMarket {
+  id        String  @id @default(uuid())
+  cropId    String  @map("crop_id")
+  marketId  String  @map("market_id")
+  isActive  Boolean @default(true) @map("is_active")
+
+  crop      Crop    @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  market    Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([cropId, marketId])
+  @@map("crop_markets")
+}
+
+// ─────────────────────────────────────────────
+// Daily prices — F-ADM-04, F-BAC-04 (time-series storage)
+// One row per crop/market/day snapshot. Admin edits update `price` and bump
+// `recordedAt`; full history is preserved via createdAt on each row rather
+// than overwriting, so the AI model always has a real historical series.
+// ─────────────────────────────────────────────
+model DailyPrice {
+  id           String   @id @default(uuid())
+  cropId       String   @map("crop_id")
+  marketId     String   @map("market_id")
+  price        Decimal  @db.Decimal(10, 2)   // RWF/kg
+  recordedAt   DateTime @default(now()) @map("recorded_at") // business date/time of the price
+  createdAt    DateTime @default(now()) @map("created_at")  // insert time (immutable audit trail)
+  createdById  String?  @map("created_by_id")               // which admin entered it
+
+  crop         Crop     @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  market       Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  createdBy    AdminUser? @relation(fields: [createdById], references: [id])
+
+  // Fast lookup of "most recent price for crop X at market Y" — F-USS-04
+  @@index([cropId, marketId, recordedAt])
+  @@map("daily_prices")
+}
+
+// ─────────────────────────────────────────────
+// USSD sessions — F-BAC-02, NF-SEC-03 (no raw PII stored)
+// ─────────────────────────────────────────────
+model UssdSession {
+  id             String   @id @default(uuid())
+  sessionId      String   @unique @map("session_id") // telecom gateway session ID
+  phoneHash      String   @map("phone_hash")          // hashed MSISDN, never raw phone number
+  language       String   @default("rw") // "rw" | "en"
+  currentMenu    String?  @map("current_menu")        // last menu node, for stepping through flow
+  startedAt      DateTime @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  status         String   @default("active") // active | completed | timeout | error
+
+  @@index([phoneHash])
+  @@index([status])
+  @@map("ussd_sessions")
+}
+
+// ─────────────────────────────────────────────
+// Prediction logs — F-AI-05
+// ─────────────────────────────────────────────
+model PredictionLog {
+  id                 String   @id @default(uuid())
+  cropId             String   @map("crop_id")
+  marketId           String?  @map("market_id") // nullable: F-AI-01 allows "no market selected"
+  currentPrice       Decimal  @map("current_price") @db.Decimal(10, 2)
+  recommendation     String           // "sell_now" | "wait"
+  predictedDirection String   @map("predicted_direction") // "rise" | "fall"
+  confidence         Float?
+  horizonDays        Int      @default(5) @map("horizon_days") // 3–7 day window, F-AI-04
+  wasSuccessful       Boolean? @map("was_successful") // filled in later once ground truth known, for F-AI-07 accuracy metric
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  crop    Crop    @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  market  Market? @relation(fields: [marketId], references: [id], onDelete: SetNull)
+
+  @@index([cropId, marketId, createdAt])
+  @@map("prediction_logs")
+}
+
+// ─────────────────────────────────────────────
+// Crop query log — F-ADM-06 (top crops / dashboard)
+// Lightweight append-only record of which crop a USSD user asked about
+// (price check or AI advice). Not PII.
+// ─────────────────────────────────────────────
+model CropQueryLog {
+  id             String   @id @default(uuid())
+  cropId         String   @map("crop_id")
+  source         String   // "ussd_prices" | "ussd_ai"
+  ussdSessionId  String?  @map("ussd_session_id") // gateway sessionId, not phone
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  crop Crop @relation(fields: [cropId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([cropId, createdAt])
+  @@map("crop_query_logs")
+}
+
+// ─────────────────────────────────────────────
+// Admin users — F-ADM-01, NF-SEC-01
+// ─────────────────────────────────────────────
+model AdminUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         AdminRole @default(OFFICER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  dailyPrices  DailyPrice[]
+
+  @@map("admin_users")
+}
+
+enum AdminRole {
+  OFFICER        // Agricultural Officer — day-to-day price entry
+  SYSTEM_ADMIN   // technical staff, per §2.3
+}
