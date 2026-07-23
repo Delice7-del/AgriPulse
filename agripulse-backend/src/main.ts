@@ -22,6 +22,15 @@ async function bootstrap() {
 
   app.useGlobalFilters(new PrismaExceptionFilter());
 
+  const config = app.get(ConfigService);
+
+  // Browser admin SPA (Next.js) — comma-separated origins, or * in local/dev
+  const corsOrigin = config.get<string>('CORS_ORIGIN') ?? 'http://localhost:3000,http://localhost:3001';
+  app.enableCors({
+    origin: corsOrigin.split(',').map((o) => o.trim()).filter(Boolean),
+    credentials: true,
+  });
+
   // NF-MAI-01 — OpenAPI docs
   const swaggerConfig = new DocumentBuilder()
     .setTitle('AgriPulse API')
@@ -32,7 +41,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3000);
 
   await app.listen(port);

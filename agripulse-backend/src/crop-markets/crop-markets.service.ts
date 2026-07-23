@@ -70,6 +70,24 @@ export class CropMarketsService {
     });
   }
 
+  findAll(filters?: {
+    cropId?: string;
+    marketId?: string;
+    isActive?: boolean;
+  }) {
+    return this.prisma.cropMarket.findMany({
+      where: {
+        ...(filters?.cropId ? { cropId: filters.cropId } : {}),
+        ...(filters?.marketId ? { marketId: filters.marketId } : {}),
+        ...(filters?.isActive === undefined
+          ? {}
+          : { isActive: filters.isActive }),
+      },
+      include: { crop: true, market: true },
+      orderBy: [{ crop: { name: 'asc' } }, { market: { name: 'asc' } }],
+    });
+  }
+
   async findActiveMarketsForCrop(cropId: string) {
     const crop = await this.prisma.crop.findUnique({ where: { id: cropId } });
     if (!crop) {

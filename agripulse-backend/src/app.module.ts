@@ -12,6 +12,8 @@ import { PricesModule } from './prices/prices.module';
 import { PredictionsModule } from './predictions/predictions.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UssdModule } from './ussd/ussd.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { PublicModule } from './public/public.module';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { UssdModule } from './ussd/ussd.module';
     PredictionsModule,
     UssdModule,
     AnalyticsModule,
+    DashboardModule,
+    PublicModule,
   ],
   controllers: [AppController],
   providers: [AppService],

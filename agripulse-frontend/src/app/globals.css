@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --ap-bg: #f4f2ec;
+  --ap-surface: #ffffff;
+  --ap-sidebar: #ebe8e0;
+  --ap-ink: #1a1f1c;
+  --ap-muted: #6b7280;
+  --ap-green: #1f6b45;
+  --ap-green-deep: #154d32;
+  --ap-green-soft: #e7f3ec;
+  --ap-orange: #f08a24;
+  --ap-orange-soft: #fff1e3;
+  --ap-line: #e5e1d8;
+}
+
+@theme inline {
+  --color-ap-bg: var(--ap-bg);
+  --color-ap-surface: var(--ap-surface);
+  --color-ap-sidebar: var(--ap-sidebar);
+  --color-ap-ink: var(--ap-ink);
+  --color-ap-muted: var(--ap-muted);
+  --color-ap-green: var(--ap-green);
+  --color-ap-green-deep: var(--ap-green-deep);
+  --color-ap-green-soft: var(--ap-green-soft);
+  --color-ap-orange: var(--ap-orange);
+  --color-ap-orange-soft: var(--ap-orange-soft);
+  --color-ap-line: var(--ap-line);
+  --font-sans: var(--font-afacad);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ap-bg);
+  color: var(--ap-ink);
+  font-family: var(--font-afacad), ui-sans-serif, system-ui, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+[role="button"],
+a,
+summary,
+label[for],
+select,
+input[type="submit"],
+input[type="button"],
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}

@@ -21,7 +21,21 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async login(dto: LoginDto): Promise<{ accessToken: string }> {
+  private toPublicUser(user: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: AuthUser['role'];
+  }): AuthUser {
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+    };
+  }
+
+  async login(dto: LoginDto): Promise<{ accessToken: string; user: AuthUser }> {
     const user = await this.prisma.adminUser.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -47,7 +61,29 @@ export class AuthService {
 
     const accessToken = await this.jwtService.signAsync(payload);
 
-    return { accessToken };
+    return {
+      accessToken,
+      user: this.toPublicUser(user),
+    };
+  }
+
+  async me(userId: string): Promise<AuthUser> {
+    const user = await this.prisma.adminUser.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid or inactive session');
+    }
+
+    return this.toPublicUser(user);
   }
 
   async createAdminUser(dto: CreateAdminUserDto): Promise<{

@@ -2,9 +2,11 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -18,6 +20,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CropMarketsService } from './crop-markets.service';
 import { CreateCropMarketDto } from './dto/create-crop-market.dto';
+import { ListCropMarketsQueryDto } from './dto/list-crop-markets-query.dto';
 
 @ApiTags('crop-markets')
 @ApiBearerAuth()
@@ -25,6 +28,14 @@ import { CreateCropMarketDto } from './dto/create-crop-market.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CropMarketsController {
   constructor(private readonly cropMarketsService: CropMarketsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'List crop–market links (optional filters for admin UI)',
+  })
+  findAll(@Query() query: ListCropMarketsQueryDto) {
+    return this.cropMarketsService.findAll(query);
+  }
 
   @Post()
   @Roles(AdminRole.SYSTEM_ADMIN, AdminRole.OFFICER)
